@@ -4,9 +4,9 @@ Historical software archive for the Perl monitoring-system backend printed in Ap
 
 ## Stage 1 scope
 
-This stage preserves source provenance and begins a human-verifiable transcription of the printed appendix. It does not restore, refactor, modernize, correct, compile, test, or extract modules from the implementation.
+This stage preserves source provenance and provides a human-verifiable transcription of the printed appendix. It does not restore, refactor, modernize, correct, compile, test, or extract modules from the implementation.
 
-The current transcription batch covers logical thesis pages 38-42 (physical PDF pages 45-49), printed lines 1-243.
+The completed transcription covers logical thesis pages 38-62 (physical PDF pages 45-69), printed lines 1-1284.
 
 ## Repository areas
 

@@ -25,11 +25,11 @@ These extractions are comparison aids only. They are not described or treated as
 - Do not refactor, modernize, compile-fix, or infer content beyond the reviewed pages.
 - Record unresolved uncertainty in `original/appendix-a/transcription-notes.md` instead of guessing.
 
-## Permitted normalizations in this batch
+## Permitted normalizations
 
 - Removed printed line numbers and page headers/footers.
 - Removed typesetting spaces inserted inside Perl tokens, including `::`, `->`, `=>`, `<=>`, dereferences, escapes, operators, sigils, punctuation, and regular expressions.
 - Rejoined code and comments wrapped by the printed page layout when they shared one printed line number.
-- Represented the visibly typographic single quotes around `GET` on printed line 161 as ASCII Perl single quotes.
+- Represented visibly typographic apostrophes and single quotation marks as ASCII characters where required to express the printed Perl token or string delimiter.
 
 No semantic correction was made.
