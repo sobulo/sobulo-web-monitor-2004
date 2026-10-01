@@ -1,0 +1,6 @@
+repository_start_line,repository_end_line,thesis_page,printed_start_line,printed_end_line,status,notes
+1,36,38,1,36,transcribed-awaiting-human-verification,"Physical PDF page 45; appendix heading omitted; numbered blank lines retained"
+37,83,39,37,83,transcribed-awaiting-human-verification,"Physical PDF page 46; visual wraps rejoined"
+84,138,40,84,138,transcribed-awaiting-human-verification,"Physical PDF page 47; visual wraps rejoined"
+139,188,41,139,188,transcribed-awaiting-human-verification,"Physical PDF page 48; visual wraps rejoined; typographic quotes on line 161 represented as ASCII single quotes"
+189,243,42,189,243,transcribed-awaiting-human-verification,"Physical PDF page 49; stops within filterOutLinks exactly at page boundary"

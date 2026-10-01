@@ -1,0 +1,1463 @@
+Appendix A
+
+Perl Code for Monitoring System
+
+1    # !/ usr / bin / perl
+2
+3    package MonitorUtils ;
+4
+5    use    strict ;
+6    use    HTTP :: Request ;
+7    use    HTTP :: Response ;
+8    use    LWP :: UserAgent ;
+9    use    HTML :: TokeParser ;
+10   use    HTTP :: Headers ;
+11
+12
+13
+14   my $ua = LWP :: UserAgent - > new () ;
+15   $ua - > agent ( " TestBot /0.1 " ) ;
+16
+17   # location of sendmail , for sending out emails
+18   my $sendmail       = " / usr / sbin / sendmail -t " ;
+19
+20   # print flags
+21   my $BROWSER = 0;
+22   my $DEBUG = 0;
+23
+24
+25   my    % crawledLinks = {};
+26   my    % SiteTitles = {}; # quick hack can do this better , maybe
+27   my    % changedUrls = {};
+28   my    % changedSites = {};
+29
+30
+31   # newSave ()
+32   # details - Takes a snapshot of websites and stores in a time - stamped
+         folder
+33   # arguments - a hash reference , containing information about which sites
+          should have their snapshot taken
+34   #            - a string specifying where the time - stamped folder should
+         be created
+35   # returns    - string specifying full path to time - stamped snapshot
+         folder
+36   sub newSave
+
+
+                                              38
+37   {
+38       my $hash_ref = shift @_ ;
+39       my $location = shift @_ ;
+40
+41       my $result_filter = " \\.( ps \\. gz | pdf | ps | ppt ) \\ s *?\ $ " ;
+42       my $explore_filter = " \\.( asp | jsp | php ) .*?\ $ |\\. htm \\ s *?\ $ |\\. html \\
+            s *?\ $ |\\/\\ w +?\\ s *?\\/??\\ s *?\ $ |\\? " ;
+43
+44       $hash_ref = g e t Li n k sF o rAllS it es ( $hash_ref , $result_filter ,
+            $explore_filter ) ;
+45       my $dirname = time ;
+46       $dirname = $location . $dirname . " / " ;
+47       browserPrint ( " <! - - - - >\ n " ) ;
+48       mkdir $dirname , 0777 or die " unable to make dir $dirname , error was
+            : $!";
+49       chmod 0777 , $dirname or warn " unable to chmod for $dirname , error
+            was : $ ! " ;
+50
+51       my $k ;
+52       my % sites = %{ $hash_ref };
+53       foreach $k ( keys % sites )
+54       {
+55            my $file_name = $k ;
+56            $file_name =~ s # /#\\\\# g ;
+57            # $file_name = $dirname . " _ " . $file_name ;
+58
+59            browserPrint ( " <! - - - - >\ n " ) ;
+60            writeSiteFile ( $dirname . " _ " . $file_name , $k , $hash_ref ) ;
+61            writeUrlFile ( $dirname . " okay " . " _ " . $file_name , $k ,
+                 $hash_ref , " okay " ) ;
+62            writeUrlFile ( $dirname . " broken " . " _ " . $file_name , $k ,
+                 $hash_ref , " broken " ) ;
+63       }
+64       return $dirname ;
+65   }
+66
+67   # getDirList ()
+68   # details - Returns the contents of all files / folders in a directory
+69   # arguments - directory to b read
+70   # returns    - string specifying full path to time - stamped snapshot
+         folder
+71   sub getDirList
+72   {
+73        my $the_dir = shift @_ ;
+74        opendir DIRHANDLE , $the_dir or die " unable to open directory
+             $the_dir , error was : $ ! " ;
+75        my @allfiles = grep !/^\.\.? $ / , readdir DIRHANDLE ;
+76        closedir DIRHANDLE ;
+77        return ( sort { $b <= > $a } @allfiles ) ;
+78
+79   }
+80
+81   # diffSavedSites ()
+82   # details -   Returns the difference between list of links cached for
+         each site
+83   # arguments - 2 hash_references ( keys = site - urls , values = array of
+         links found extracted from site )
+
+
+                                             39
+84    # returns    - a hash_reference containing the difference btw the links
+          for each site
+85    sub diffSavedSites
+86    {
+87         my $hash_ref1 = shift @_ ;
+88         my $hash_ref2 = shift @_ ;
+89         my % sites1 = %{ $hash_ref1 };
+90         my % sites2 = %{ $hash_ref2 };
+91
+92        my $k ;
+93        foreach $k ( keys % sites1 ) {
+94            unless ( exists ( $sites2 { $k }) )
+95            {
+96                 debugPrint ( " Warning : doing diff , but no match for $k " ) ;
+97                 next ;
+98            }
+99            my % temp1 = %{( $sites1 { $k }) };
+100           my % temp2 = %{( $sites2 { $k }) };
+101
+102           my @init_links = diffLinks ( $temp1 { " links " } , $temp2 { " links " }) ;
+103           my @broken = diffLinks ( $temp1 { " okay " } , $temp2 { " okay " }) ;
+104           my @links ;
+105           my % brokenHash ;
+106           my $b ;
+107           foreach $b ( @broken ) {
+108                my @info = @ { $b };
+109                $brokenHash { $info [0]} = " " ;
+110           }
+111           foreach $b ( @init_links ) {
+112                my @info = @ { $b };
+113                next if ( exists ( $brokenHash { $info [2]}) ) ;
+114                push @links , $b ;
+115           }
+116           $temp1 { " links " } = \ @links ;
+117           $temp1 { " broken " } = \ @broken ;
+118
+119           $sites1 { $k } = \% temp1 ;
+120       }
+121       $hash_ref1 = \% sites1 ;
+122       return $hash_ref1 ;
+123   }
+124
+125   # readSavedSites ()
+126   # details - Reads in a saved snapshot into a hash - reference
+127   # arguments - hash - reference containing list of sites to read in
+128   # returns    - hash - reference with snapshot data associated with each
+          site
+129   sub readSavedSites
+130   {
+131        my $hash_ref = shift @_ ;
+132        my $location = shift @_ ;
+133        my % sites = %{ $hash_ref };
+134
+135       my $k ;
+136       foreach $k ( keys % sites )
+137       {
+138           my $file_name = $k ;
+
+
+                                            40
+139            $file_name =~ s # /#\\\\# g ;
+140            # $file_name = $location . " _ " . $file_name ;
+141            $hash_ref = readSiteFile ( $location . " _ " . $file_name , $k ,
+                   $hash_ref ) ;
+142            $hash_ref = readUrlFile ( $location . " okay " . " _ " . $file_name ,
+                   $k , $hash_ref , " okay " ) ;
+143            $hash_ref = readUrlFile ( $location . " broken " . " _ " . $file_name
+                   , $k , $hash_ref , " broken " ) ;
+144       }
+145       return $hash_ref ;
+146   }
+147
+148   # getLinks ()
+149   # details - Extracts all the links in a page
+150   # arguments - string containing url of page
+151   # returns      - a list of links found on the page
+152   sub getLinks
+153   {
+154        my $page_url = shift @_ ;
+155        browserPrint ( " <! - - - - >\ n " ) ;
+156        my $req ;
+157        my $res ;
+158        my $i = 0;
+159        while ( $i < 2) { # Attempts to get a page twice .
+160             browserPrint ( " <! - - - - >\ n " ) ;
+161             $req = HTTP :: Request - > new ( ’ GET ’ = > $page_url ) ;
+162             $res = $ua - > request ( $req ) ;
+163             if ( $res - > is_success ) {
+164                   last ;
+165             }
+166             $i ++;
+167        }
+168        unless ( $res - > is_success ) { # If page is not present flag an error .
+169             debugPrint ( " ERROR : Unable to retrieve source page : $page_url \ n "
+                     );
+170             return ( -1 , -1) ;
+171        }
+172        my $title = $res - > title ;
+173        if ( defined ( $SiteTitles { $page_url }) ) {
+174             $SiteTitles { $page_url } = $title ;
+175        }
+176        my $p = HTML :: TokeParser - > new ( $res - > content_ref ) ;
+177
+178       my @link_info = () ;
+179       while ( my $token = $p - > get_tag ( " a " ) ) {
+180           my $t ;
+181           my $url = $token - >[1]{ href };
+182           my $text = $p - > get_trimmed_text ( " / a " ) ;
+183           my $p_url = URI - > new ( $page_url ) ;
+184           my $ref_uri = URI - > new ( $url ) ;
+185           my $abs_url = $ref_uri - > abs ( $p_url ) ;
+186           browserPrint ( " <! - - - - >\ n " ) ;
+187                                            # Each node contains the absolute url ,
+                                                     the acnchor text , current url and
+                                                     and title of current url .
+188           push @link_info , [ $abs_url - > canonical , $text , $p_url - > canonical
+                  , $title ];
+
+
+                                           41
+189       }
+190       return @link_info ;
+191   }
+192
+193   # filterLinks ()
+194   # details - Returns all links matching a particular filter ( regular
+          expression )
+195   # arguments - A list of links
+196   #              - filter specified by regular expression
+197   # returns     - A list of links
+198   sub filterLinks
+199   {
+200        my $filter = shift @_ ;
+201        my @link_info = @_ ;
+202        return @link_info unless ( defined ( $filter ) && $filter =~ /^\ S /) ;
+203        my $l ;
+204        my @f i lte r ed_ l in k _ in f o = () ;
+205        foreach $l ( @link_info ) {
+206             my @info = @ { $l };
+207             my $url = $info [0];
+208             browserPrint ( " <! - - - - >\ n " ) ;
+209             # quickDebug ( $url , " Found in filterLinks before Filtering ") ;
+210             next if ( $url !~ / $filter / i ) ;
+211             # quickDebug ( $url , " Found in filterLinks after Filtering ") ;
+212             push @filtered_link_info , $l ;
+213        }
+214        return @ f i lt e r ed _ l in k _ in f o ;
+215   }
+216
+217   # filterOutLinks ()
+218   # details - Returns all the links that do not match specified filter
+219   # arguments - A list of links
+220   #           - filter specified by regular expression
+221   #           - list of integers , specifying which part of link -
+          datastructure to filter on
+222   # returns   - a list of links
+223   sub filterOutLinks
+224   {
+225        my @link_info = @ { shift @_ };
+226        my $filter = shift @_ ;
+227        my @keys = @_ ;
+228
+229         return @link_info unless ( defined ( $filter ) && $filter =~ /^\ S /) ;
+230         my $l ;
+231         my @f i lte r ed_ l in k _ in f o = () ;
+232         foreach $l ( @link_info ) {
+233             my @info = @ { $l };
+234             my $found = 0;
+235             my $k ;
+236             foreach $k ( @keys ) {
+237                   my $url = $info [ $k ];
+238                   if ( $url =~ / $filter / i )
+239                   {
+240                         $found = 1;
+241                         last ;
+242                   }
+243             }
+
+
+                                            42
+244             browserPrint ( " <! - - - - >\ n " ) ;
+245             # quickDebug ( $url , " Found in filterLinks before Filtering ") ;
+246             next if ( $found == 1) ;
+247             # quickDebug ( $url , " Found in filterLinks after Filtering ") ;
+248             push @filtered_link_info , $l ;
+249       }
+250       return @ f i lt e r ed _ l in k _ in f o ;
+251   }
+252
+253   # removeDuplicates ()
+254   # details - Removes all duplicates found in list of links
+255   # arguments - A list of links
+256   # returns       - A list of links
+257   sub re m o v e Du p l ic a t e L i n k s
+258   {
+259        my @link_info = @_ ;
+260        my @link ;
+261        my % linkTable ;
+262
+263       my $i = 0;
+264       my $l ;
+265       foreach $l ( @link_info ) {
+266           my @info = @ { $l };
+267           my $url = $info [0];
+268           next if ( $linkTable { lc ( $url ) } == 1) ;
+269           $linkTable { lc ( $url ) } = 1;
+270           push @link , $l ;
+271
+272             # if ( $linkTable { $url } == 1) {
+273                  # debugPrint (" Found duplicate : $url \ n ") ;
+274                  # splice @link_info , $i , 1;
+275                  # next ;
+276             #}
+277             $linkTable { $url } = 1;
+278             $i ++;
+279       }
+280       return @link ;
+281   }
+282
+283   sub filterHash
+284   {
+285       my % sourceHash = %{ shift @_ };
+286       my @filterKeys = @_ ;
+287       my % targetHash ;
+288
+289       my $k ;
+290       foreach $k ( @filterKeys ) {
+291           if ( exists ( $sourceHash { $k }) ) {
+292                $targetHash { $k } = $sourceHash { $k };
+293           }
+294       }
+295       return \% targetHash ;
+296   }
+297   # For a particular website crawl for the given depth and retreive all
+          the relevant urls .
+298   sub getLinksForSite
+299   {
+
+
+                                                       43
+300       my ( $link_info_ref , $depth , $resultsFilter , @crawlFilter ) = @_ ;
+301       my @link_info = @ { $link_info_ref };
+302       my $site = $link_info [0];
+303       $crawledLinks { $site } = 1;
+304       browserPrint ( " <! - - - - >\ n " ) ;
+305       my @links = getLinks ( $site ) ; # get all the links in the site .
+306       my @okayUrls ;
+307       my @brokenUrls ;
+308       if ( defined ( $links [0]) && $links [0] == -1) { # if there are no
+             links the url is broken
+309            push @brokenUrls , $link_info_ref ;
+310            @links = () ;
+311       }
+312       else { # else it is fine
+313            push @okayUrls , $link_info_ref ;
+314       }
+315
+316       my @results = filterLinks ( $resultsFilter , @links ) ;
+317       return (\ @results , \ @okayUrls , \ @brokenUrls ) if ( $depth == 0) ;
+318
+319       foreach my $c ( @crawlFilter ) {
+320           @links = filterLinks ( $c , @links ) ; # which links to crawl , e . g .
+                 only * htm || * html
+321       }
+322
+323       foreach my $l ( @links ) {
+324           my @info = @ { $l }; # Each info element has an array of elements
+                 representing the tag .
+325           my $url = $info [0];
+326           my $url2 = $url . " / " ;
+327           browserPrint ( " <! - - - - >\ n " ) ;
+328           next if (( $crawledLinks { $url } == 1 || $crawledLinks { $url2 } ==
+                 1) && debugPrint ( " Skipping : $url \ n " ) ) ;
+329           my ( $res_ref , $ok_ref , $brk_ref ) = getLinksForSite ( $l , $depth
+                 -1 , $resultsFilter , @crawlFilter ) ;
+330           my @temp = @ { $res_ref };
+331           my @temp2 = @ { $ok_ref };
+332           my @temp3 = @ { $brk_ref };
+333
+334           if ( defined ( $temp [0]) ) {
+335                push @results , @temp ;
+336           }
+337           if ( defined ( $temp2 [0]) ) {
+338                push @okayUrls , @temp2 ;
+339           }
+340           if ( defined ( $temp3 [0]) ) {
+341                push @brokenUrls , @temp3 ;
+342           }
+343       }
+344       return (\ @results , \ @okayUrls , \ @brokenUrls ) ;
+345   }
+346
+347   # Returns a hash of sites and relevant links in it . Each element in the
+          hash is referenced by the
+348   # site . Then the array of links is referenced by the links tag .
+349   sub get L ink s For A ll S i te s
+350   {
+
+
+                                           44
+351       my $hash_ref = shift @_ ;
+352       my $resultFilter = shift @_ ;
+353       my $exploreFilter = shift @_ ;
+354       my % sites = %{ $hash_ref };
+355       % crawledLinks = {};
+356       my $i = 1;
+357       my $numberOfSites = scalar ( keys % sites ) ;
+358       foreach my $k ( keys % sites ) {
+359            my % temp = %{( $sites { $k }) };
+360            my $depth = $temp { " depth " };
+361            my $within = $temp { " allow " };
+362            unless ( defined ( $depth ) && ( $depth =~ /^\ d + $ /) ) {
+363                 $depth = 1000; # large enough to consider inifinite depth
+364            }
+365            unless ( defined ( $within ) ) {
+366                 $within = " " ;
+367            }
+368   # Why [ $k , "" , "" , ""].
+369            my ( $res_ref , $ok_ref , $brk_ref ) = getLinksForSite ([ $k , " " , " " ,
+                    " " ] , $depth , $resultFilter , $exploreFilter , $within ) ;
+370            $temp { " links " } = $res_ref ;
+371            $temp { " okay " } = $ok_ref ;
+372            $temp { " broken " } = $brk_ref ;
+373            $sites { $k } = \% temp ;
+374            % crawledLinks = {};
+375            debugPrint ( " ************** Done with site$i : $k \ n
+                   **************** " ) ;
+376            browserPrint ( " Done with site : $k , completed $i out of
+                   $numberOfSites < br >\ n " ) ;
+377            $i ++;
+378       }
+379       return \% sites ;
+380   }
+381
+382   sub ge t K eys S ort e dB y N am e
+383   {
+384       my % hash = %{ shift @_ };
+385       my @sortedKeys = keys % hash ;
+386       @sortedKeys = sort { lc ( $ { $hash { $a }}{ " name " }) cmp lc ( $ { $hash { $b }}{ "
+               name " }) } @sortedKeys ;
+387       return @sortedKeys ;
+388   }
+389
+390   sub prin tSnaps hotHtm l
+391   {
+392       my $hash_ref = shift @_ ;
+393       my $type = shift @_ ;
+394       my $hideEmpty = shift @_ ;
+395       my $hide = shift @_ ;
+396       my $sort = shift @_ ;
+397       my $course = shift @_ ;
+398       my $network = shift @_ ;
+399       my % sites = %{ $hash_ref };
+400
+401        my $site_name ;
+402        print " <ol >\ n " ;
+403
+
+
+
+
+                                               45
+404          my @sortedSites = keys % sites ;
+405          if ( $sort eq " name " ) {
+406               @sortedSites = g e t Ke y sSor t ed ByName ( $hash_ref ) ;
+407          }
+408          else
+409          {
+410               @sortedSites = sort { lc ( $ { $sites { $a }}{ " title " }) cmp lc ( $ {
+                     $sites { $b }}{ " title " }) } @sortedSites ;
+411          }
+412
+413          foreach $site_name ( @sortedSites ) {
+414              my % temp = %{( $sites { $site_name }) };
+415              my @links = @ {( $temp { " links " }) };
+416              # my @okay_links = @ {( $temp {" okay "}) };
+417              my @broken_links = @ {( $temp { " broken " }) };
+418              my $d = $temp { " depth " };
+419              my $w = $temp { " allow " };
+420              my $tit = $temp { " title " };
+421              my $name = $temp { " name " };
+422
+423               if ( $course == 1) {
+424                    @links = filterOutLinks (\ @links , " homework | exam | midterm |
+                          course | handout | fall | spring | winter | lecture " , 1 , 3) ;
+425               }
+426               next if (( scalar ( @links ) == 0) && ( $hideEmpty == 1) ) ;
+427
+428               print << EOF2 ;
+429                                      <p > < li > <b > Researcher : $name Site : <a href = "
+                                              $site_name " > $tit </ a > [ Crawl Depth : $d ] [ Stay
+                                                Within : $w ] </b >
+430   EOF2
+431
+432          print " \n < ul > " ;
+433          my $l ;
+434          my $td ;
+435          if ( $hide == 1) {
+436               @links = r e m o v e D u p l ica t eLi nks ( @links ) ;
+437          }
+438
+439          my @sortedLinks = sort {           lc ( $ { $a }[1]) cmp lc ( $ { $b }[1]) } @links ;
+440          if ( scalar ( @sortedLinks )       == 0) {
+441               if ( $type eq " diff " )      {
+442                    print " <li > <b > No    Changes Found \n </ b > " ;
+443               }
+444               else
+445               {
+446                    print " <li > <b > No    pdf / ps links found \n </ b > " ;
+447               }
+448
+449          }
+450          foreach $l ( @sortedLinks ) {
+451              my @info = @ { $l };
+452              my $u = $info [0];
+453              my $t = $info [1];
+454              my $p = $info [2];
+455              my $ti = $info [3];
+456              my $edit = " found on " ;
+
+
+                                                      46
+457               if ( $type eq " diff " ) {
+458                    $edit = " " . $info [4] . " " ;
+459               }
+460               print << EOF3 ;
+461                                 <li > < a href = " $u " >$t </ a > $edit <a href = " $p " >$ti
+                                         </ a >
+462   EOF3
+463          }
+464
+465          if ( $network == 1) {
+466
+467               @sortedLinks = sort { lc ( $ { $a }[1]) cmp lc ( $ { $b }[1]) }
+                     @broken_links ;
+468               if ( scalar ( @sortedLinks ) > 0) {
+469                    if ( $type eq " diff " ) {
+470                         print " <li > <b > Below is a list of links that were not
+                                crawled in BOTH snapshots ( due to network errors e . g
+                                . delays or broken links ) , these links were not
+                                considered for differences : \ n " ;
+471                         print " [ added ] implies the link was present in the more
+                                 recent snapshot but not in the former ( vice versa
+                                for [ removed ]) : </b > < ul >\ n ; "
+472                    }
+473                    else
+474                    {
+475                         print " <li > <b > Below is a list of links not crawled due
+                                to network errors ( e . g . delays or broken links ) </b > <
+                                ul >:\ n " ;
+476                    }
+477
+478                     foreach $l ( @sortedLinks ) {
+479                         my @info = @ { $l };
+480                         my $u = $info [0];
+481                         my $t = $info [1];
+482                         my $p = $info [2];
+483                         my $ti = $info [3];
+484                         my $edit = " found on " ;
+485                         if ( $type eq " diff " ) {
+486                              $edit = " " . $info [4] . " " ;
+487                         }
+488                         print << EOF4 ;
+489                                  <li > < a href = " $u " >$t </ a > $edit <a href = " $p " >$ti
+                                         </ a >
+490   EOF4
+491                     }
+492                     print " </ ul >\ n " ;
+493              }
+494          }
+495          print " </ ul > </p >\ n " ;
+496
+497   }
+498               print " </ ol >\ n " ;
+499   }
+500
+501   sub ge t Sn a p s h o t E m a i l H t m l
+502   {
+503       my $hash_ref = shift @_ ;
+
+
+                                                   47
+504   my   $type = shift @_ ;
+505   my   $hideEmpty = shift @_ ;
+506   my   $hide = shift @_ ;
+507   my   $sort = shift @_ ;
+508   my   @rules = @_ ;
+509   my   % sites = %{ $hash_ref };
+510   my   % results_hash ;
+511   my   $diffResult ;
+512
+513   my $site_name ;
+514   $diffResult = " <ol >\ n " ;
+515
+516   my @sortedSites = keys % sites ;
+517   if ( $sort eq " name " ) {
+518        @sortedSites = g e t Ke y sSor t ed ByName ( $hash_ref ) ;
+519   }
+520   else
+521   {
+522        @sortedSites = sort { lc ( $ { $sites { $a }}{ " title " }) cmp lc ( $ {
+              $sites { $b }}{ " title " }) } @sortedSites ;
+523   }
+524
+525   foreach $site_name ( @sortedSites ) {
+526       my % temp = %{( $sites { $site_name }) };
+527       my @links = @ {( $temp { " links " }) };
+528       my $d = $temp { " depth " };
+529       my $w = $temp { " allow " };
+530       my $tit = $temp { " title " };
+531       my $name = $temp { " name " };
+532
+533         if ( defined ( $rules [0]) ) {
+534              my $r ;
+535              foreach $r ( @rules ) {
+536                  # rules table
+537                  if ( $r eq " rule1 " ) {
+538                        @links = filterOutLinks (\ @links , " homework | exam |
+                              midterm | course | handout | fall | spring | winter " , 1 ,
+                              3) ;
+539                  }
+540
+541             }
+542         }
+543         next if (( scalar ( @links ) == 0) && ( $hideEmpty == 1) ) ;
+544
+545         $diffResult .= " <p > < li > <b > Researcher : $name Site : <a href = ’
+               $site_name ’> $tit </ a > [ Crawl Depth : $d ] [ Stay Within : $w ] </b >
+               ";
+546
+547
+548         $diffResult .= " \n < ul > " ;
+549         my $l ;
+550         my $td ;
+551         if ( $hide == 1) {
+552              @links = r e m o v eDu pli c at e Links ( @links ) ;
+553         }
+554
+
+
+
+
+                                             48
+555              my @sortedLinks = sort { lc ( $ { $a }[1]) cmp lc ( $ { $b }[1]) } @links
+                    ;
+556              if ( scalar ( @sortedLinks ) == 0) {
+557                   $diffResult .= " <li > <b > No Changes Found \n </ b > " ;
+558              }
+559              foreach $l ( @sortedLinks ) {
+560                   my @info = @ { $l };
+561                   my $u = $info [0];
+562                   my $t = $info [1];
+563                   my $p = $info [2];
+564                   my $ti = $info [3];
+565                   my $edit = " found on " ;
+566                   if ( $type eq " diff " ) {
+567                        $edit = " " . $info [4] . " " ;
+568                   }
+569                   $diffResult .= " <li > < a href = ’ $u ’>$t </ a > $edit <a href = ’ $p ’>
+                         $ti </ a >\ n " ;
+570              }
+571              $diffResult .= " </ ul > </p >\ n " ;
+572        }
+573        $diffResult .= " </ ol >\ n " ;
+574        return $diffResult ;
+575   }
+576
+577   sub g e t Sn a ps h o t E m a i l T e x t
+578   {
+579       my $hash_ref = shift @_ ;
+580       my $type = shift @_ ;
+581       my $hideEmpty = shift @_ ;
+582       my $hide = shift @_ ;
+583       my $sort = shift @_ ;
+584       my @rules = @_ ;
+585       my % sites = %{ $hash_ref };
+586       my % results_hash ;
+587       my $diffResult ;
+588
+589        my $site_name ;
+590        $diffResult = " " ;
+591
+592        my @sortedSites = keys % sites ;
+593        if ( $sort eq " name " ) {
+594             @sortedSites = g e t Ke y sSor t ed ByName ( $hash_ref ) ;
+595        }
+596        else
+597        {
+598             @sortedSites = sort { lc ( $ { $sites { $a }}{ " title " }) cmp lc ( $ {
+                   $sites { $b }}{ " title " }) } @sortedSites ;
+599        }
+600
+601        foreach $site_name ( @sortedSites ) {
+602            my % temp = %{( $sites { $site_name }) };
+603            my @links = @ {( $temp { " links " }) };
+604            my $d = $temp { " depth " };
+605            my $w = $temp { " allow " };
+606            my $tit = $temp { " title " };
+607            my $name = $temp { " name " };
+608
+
+
+
+
+                                                  49
+609            if ( defined ( $rules [0]) ) {
+610                 my $r ;
+611                 foreach $r ( @rules ) {
+612                     # rules table
+613                     if ( $r eq " rule1 " ) {
+614                           @links = filterOutLinks (\ @links , " homework | exam |
+                                 midterm | course | handout | fall | spring | winter " , 1 ,
+                                 3) ;
+615                     }
+616
+617                }
+618            }
+619            next if (( scalar ( @links ) == 0) && ( $hideEmpty == 1) ) ;
+620
+621            $diffResult .= " Researcher : $name SiteName : $tit SiteUrl :
+                  $site_name [ Crawl Depth : $d ] [ Stay Within : $w ]\ n " ;
+622
+623            my $l ;
+624            my $td ;
+625            if ( $hide == 1) {
+626                 @links = r e m o v eDu pli c at e Links ( @links ) ;
+627            }
+628
+629            my @sortedLinks = sort { lc ( $ { $a }[1]) cmp lc ( $ { $b }[1]) } @links
+                  ;
+630            if ( scalar ( @sortedLinks ) == 0) {
+631                 $diffResult .= "        No Changes Found \ n " ;
+632            }
+633            foreach $l ( @sortedLinks ) {
+634                 my @info = @ { $l };
+635                 my $u = $info [0];
+636                 my $t = $info [1];
+637                 my $p = $info [2];
+638                 my $ti = $info [3];
+639                 my $edit = " found on " ;
+640                 if ( $type eq " diff " ) {
+641                      $edit = " " . $info [4] . " " ;
+642                 }
+643                 $diffResult .= "        PaperName : $t PaperUrl : $u $edit
+                       PageName : $ti PageUrl : $p \ n " ;
+644            }
+645            $diffResult .= " \ n " ;
+646       }
+647       $diffResult .= " \ n " ;
+648       return $diffResult ;
+649   }
+650
+651   sub checkUrlFormat
+652   {
+653       my $url = shift @_ ;
+654       if ( $url =~ /^ https ?:\/\/\ S +?\.\ S +? $ /) {
+655            return 1;
+656       }
+657       else
+658       {
+659            warn ( " Warning : illegal url format for $url \ n " ) ;
+660            return 0;
+
+
+                                                50
+661        }
+662   }
+663
+664   sub readSiteFile
+665   {
+666       my $file_name = shift @_ ;
+667       my $site_name = shift @_ ;
+668       my $hash_ref = shift @_ ;
+669       my % sites = %{ $hash_ref };
+670       my $k ;
+671       my $name = $sites { $site_name } - >{ " name " };
+672
+673        checkUrlFormat ( $site_name ) ;
+674
+675        browserPrint ( " <! - - - - >\ n " ) ;
+676        open ( READ , " < $file_name " ) or die " unable to open for reading site
+              info : $file_name " ;
+677
+678        my $line = < READ >;
+679        $line =~ s /\ n //;
+680        my ( $url , $depth , $title , @within ) = split /\|/ , $line ;
+681        my $with = join ’| ’ , @within ;
+682        die " file contains link for $url and not for $site_name " if (
+              $site_name ne $url ) ;
+683        my % temp ;
+684        $temp { " depth " } = $depth ;
+685        $temp { " allow " } = $with ;
+686        $temp { " title " } = $title ;
+687        if ( defined ( $name ) ) {
+688             $temp { " name " } = $name ;
+689        }
+690        my @links ;
+691        while ( < READ >) {
+692             $line = $_ ;
+693             $line =~ s /\ n //;
+694             next if ( $line =~ /^\ s * $ /) ;
+695             my ( $u , $text , $page_url , $page_title ) = split /\|/ , $line ;
+696             checkUrlFormat ( $page_url ) ;
+697             push @links , [ $u , $text , $page_url , $page_title ];
+698             browserPrint ( " <! - - - - >\ n " ) ;
+699        }
+700        $temp { " links " } = \ @links ;
+701        $sites { $site_name } = \% temp ;
+702        close READ ;
+703        return \% sites ;
+704   }
+705
+706   sub writeSiteFile
+707   {
+708       my $file_name = shift @_ ;
+709       my $site_name = shift @_ ;
+710       my $hash_ref = shift @_ ;
+711       my % sites = %{ $hash_ref };
+712       browserPrint ( " <! - - - - >\ n " ) ;
+713
+714        checkUrlFormat ( $site_name ) ;
+715
+
+
+
+
+                                                   51
+716       open ( WRITE , " > $file_name " ) or die " unable to open for writing site
+             info : $file_name " ;
+717
+718       my   % temp = %{( $sites { $site_name }) };
+719       my   @links = @ {( $temp { " links " }) };
+720       my   $d = $temp { " depth " };
+721       my   $w = $temp { " allow " };
+722       my   $title = $site_name ;
+723       if   ( defined ( $SiteTitles { $site_name }) && ( $SiteTitles { $site_name }
+               !~ /^\ s *? $ /) )
+724       {
+725             $title = $SiteTitles { $site_name };
+726       }
+727
+728       print WRITE " $site_name | $d | $title | $w \ n " ;
+729       my $l ;
+730       foreach $l ( @links ) {
+731           browserPrint ( " <! - - - - >\ n " ) ;
+732           my @info = @ { $l };
+733           $title = $info [2];
+734           my $text = $info [0];
+735           if ( defined ( $info [1]) && ( $info [1] !~ /^\ s *? $ /) )
+736           {
+737               $text = $info [1];
+738           }
+739           if ( defined ( $info [3]) && ( $info [3] !~ /^\ s *? $ /) )
+740           {
+741               $title = $info [3];
+742           }
+743           print WRITE " $info [0]| $text | $info [2]| $title \ n " ;
+744       }
+745       close WRITE ;
+746       chmod 0664 , $file_name or warn " unable to chmod for $file_name ,
+             error was : $ ! " ;
+747   }
+748
+749   sub readUrlFile
+750   {
+751       my $file_name = shift @_ ;
+752       my $site_name = shift @_ ;
+753       my $hash_ref = shift @_ ;
+754       my $type = shift @_ ;
+755       my % sites = %{ $hash_ref };
+756       my $k ;
+757       my $name = $sites { $site_name } - >{ " name " };
+758
+759       checkUrlFormat ( $site_name ) ;
+760
+761       browserPrint ( " <! - - - - >\ n " ) ;
+762       open ( READ , " < $file_name " ) or die " unable to open for reading site
+             info : $file_name " ;
+763
+764       my % temp = %{( $sites { $site_name }) };
+765       my @links ;
+766       my $line ;
+767       while ( < READ >) {
+768            $line = $_ ;
+
+
+                                             52
+769              $line =~ s /\ n //;
+770              next if ( $line =~ /^\ s * $ /) ;
+771              my ( $u , $text , $page_url , $page_title ) = split /\|/ , $line ;
+772              checkUrlFormat ( $page_url ) ;
+773              push @links , [ $u , $text , $page_url , $page_title ];
+774              browserPrint ( " <! - - - - >\ n " ) ;
+775        }
+776        $temp { $type } = \ @links ;
+777        $sites { $site_name } = \% temp ;
+778        # $SiteTitles { $site_name } = "";
+779        close READ ;
+780        return \% sites ;
+781   }
+782
+783   sub writeUrlFile
+784   {
+785       my $file_name = shift @_ ;
+786       my $site_name = shift @_ ;
+787       my $hash_ref = shift @_ ;
+788       my $type = shift @_ ;
+789       my % sites = %{ $hash_ref };
+790       browserPrint ( " <! - - - - >\ n " ) ;
+791
+792        checkUrlFormat ( $site_name ) ;
+793
+794        open ( WRITE , " > $file_name " ) or die " unable to open for writing url
+              info : $file_name " ;
+795
+796        my   % temp = %{( $sites { $site_name }) };
+797        my   @links = @ {( $temp { $type }) };
+798        my   $title = $site_name ;
+799        if   ( defined ( $SiteTitles { $site_name }) && ( $SiteTitles { $site_name }
+                !~ /^\ s *? $ /) )
+800        {
+801              $title = $SiteTitles { $site_name };
+802        }
+803
+804        my $l ;
+805        foreach $l ( @links ) {
+806            browserPrint ( " <! - - - - >\ n " ) ;
+807            my @info = @ { $l };
+808            $title = $info [2];
+809            my $text = $info [0];
+810            if ( defined ( $info [1]) && ( $info [1] !~ /^\ s *? $ /) )
+811            {
+812                $text = $info [1];
+813            }
+814            if ( defined ( $info [3]) && ( $info [3] !~ /^\ s *? $ /) )
+815            {
+816                $title = $info [3];
+817            }
+818            print WRITE " $info [0]| $text | $info [2]| $title \ n " ;
+819        }
+820        close WRITE ;
+821        chmod 0664 , $file_name or warn " unable to chmod for $file_name ,
+              error was : $ ! " ;
+822   }
+
+
+                                                   53
+823
+824   sub sortLinks
+825   {
+826       my @link_info = @_ ;
+827       my @sorted = sort { ( $$a [0] . $$a [2]) cmp ( $$b [0] . $$b [2]) }
+             @link_info ;
+828       return @sorted ;
+829   }
+830
+831   sub diffLinks
+832   {
+833       my ( $refA , $refB ) = @_ ;
+834       my @listA = sortLinks ( @ { $refA }) ;
+835       my @listB = sortLinks ( @ { $refB }) ;
+836
+837       my $i = 0; my $j = 0;
+838       my @diffResult ;
+839       while ( $i < scalar ( @listA ) || $j < scalar ( @listB ) )
+840       {
+841           if ( $i >= scalar ( @listA ) ) {
+842                 my @info = @ { $listB [ $j ]};
+843                 push @info , " added to " ;
+844                 push @diffResult , \ @info ;
+845                 $j ++;
+846                 next ;
+847           }
+848
+849            if ( $j >= scalar ( @listB ) ) {
+850                 my @info = @ { $listA [ $i ]};
+851                 push @info , " removed from " ;
+852                 push @diffResult , \ @info ;
+853                 $i ++;
+854                 next ;
+855            }
+856
+857            my   @infoA = @ { $listA [ $i ]};
+858            my   @infoB = @ { $listB [ $j ]};
+859            my   $urlA = $infoA [0];
+860            my   $urlB = $infoB [0];
+861            if   (( $urlA cmp $urlB ) == 0)
+862            {
+863                 $j ++; $i ++;
+864            }
+865            elsif (( $urlA cmp $urlB ) < 0) {
+866                 push @infoA , " removed from " ;
+867                 push @diffResult , \ @infoA ;
+868                 $i ++;
+869            }
+870            else
+871            {
+872                 push @infoB , " added to " ;
+873                 push @diffResult , \ @infoB ;
+874                 $j ++;
+875            }
+876       }
+877       return @diffResult ;
+878   }
+
+
+                                             54
+879
+880   sub printLinkInfo
+881   {
+882       my @link_info = @_ ;
+883       my $l ;
+884       foreach $l ( @link_info ) {
+885           my @info = @ { $l };
+886           my $i ;
+887           # debugPrint (" $info [1]") ;
+888           for ( $i = 0; $i < scalar ( @info ) ; $i ++) {
+889                debugPrint ( " $i :\ t$info [ $i ]\ t " ) ;
+890           }
+891           debugPrint ( " \ n " ) ;
+892       }
+893   }
+894
+895   sub t r a n s l a t e U r l T o F i l e N a m e
+896   {
+897               my $file_name = shift @_ ;
+898               $file_name =~ s # /#\\\\# g ;
+899               $file_name = " _ " . $file_name ;
+900               return $file_name ;
+901   }
+902
+903   sub readCachedPage
+904   {
+905       my $file_name = shift @_ ;
+906       open ( INIT , " < $file_name " ) or die " unabale to open cached page
+             $file_name for reading , error was : $ ! " ;
+907       my $content = ( join " " , < INIT >) ;
+908           return \ $content ;
+909   }
+910
+911   sub writeCachedPage
+912   {
+913       my ( $file_name , $contents_ref ) = @_ ;
+914            my $contents = $$contents_ref ;
+915
+916        die " unable to write undefined value $contents " unless defined (
+              $contents ) ;
+917
+918        open ( INIT , " > $file_name " ) or die " couldn ’t open init file
+              $file_name for writing , error was : $ ! " ;
+919
+920        print INIT " $contents " ;
+921        close INIT ;
+922        chmod 0664 , $file_name or warn " unable to chmod for $file_name ,
+              error was : $ ! " ;
+923            # chmod 0666 , $file_name or die " unable to chmod for $file_name ,
+                    error was : $ !";
+924   }
+925
+926   sub sendMail
+927   {
+928       my ( $to , $from , $subject , $text_message , $html_message ) = @_ ;
+929
+930        my $email = << THE_EMAIL ;
+
+
+                                              55
+931   MIME - Version : 1.0
+932   Content - Type : multipart / alternative ; boundary = "
+          _jkkdsffds32432dlkjifewks_ "
+933   To : $to
+934   From : $from
+935   Subject : $subject
+936
+937   -- _ j k k d s f f d s 3 2 4 3 2 d l k j i f e w k s _
+938   Content - Type : text / plain ; charset = " iso -8859 -1 "
+939
+940   $text_message
+941
+942   -- _ j k k d s f f d s 3 2 4 3 2 d l k j i f e w k s _
+943   Content - Type : text / html ; charset = " iso -8859 -1 "
+944
+945   < html >
+946   < body >
+947   <! - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+948   We appologize if you see this message . The
+949   email was intended to display either plain
+950   text or HTML , not both . You may ignore the
+951   rest of the email . The plain text above is
+952   the complete message intended to reach you .
+953   ------------------------------------------>
+954
+955   $html_message
+956   </ body >
+957   </ html >
+958
+959   -- _jkkdsffds32432dlkjifewks_ - -
+960   THE_EMAIL
+961
+962          open ( MAIL , " | $sendmail " ) or die " couldn ’t open sendmail , error was :
+                  $!";
+963          print MAIL $email ;
+964          close ( MAIL ) ;
+965   }
+966
+967   sub parseXml
+968   {
+969       my $content = shift @_ ;
+970       my $hash_ref = parseXmlHelper ( $content , {}) ;
+971       my % hash = %{ $hash_ref };
+972
+973          die " <xml - document > expected \ n " unless exists ( $hash_ref - >{ " xml -
+                document " }) ;
+974          $hash_ref = $ { $hash_ref - >{ " xml - document " }}[0];
+975          return $hash_ref ;
+976   }
+977
+978   sub parseXmlHelper
+979   {
+980       my $content = shift @_ ;
+981       my $hash_ref = shift @_ ;
+982       my % xml_hash = %{ $hash_ref };
+983
+984          if (! defined ( $content ) || ( $content =~ /^\ s * $ / s ) ) {
+
+
+                                                                     56
+985             return $hash_ref ;
+986        }
+987
+988        if ( $content !~ /^\ s * <\ s *(\ S +?) \ s * >\ s *(.*?) \ s * <(\/|\\) \ s *\1\ s * >\ s */
+              s) {
+989             die " error while parsing xml file \ n " ;
+990        }
+991
+992        my $tag_name = $1 ;
+993        my $tag_content = $2 ;
+994        $content = $ ’;
+995
+996        # debugPrint (" TagName : # $tag_name #\ n ") ;
+997        # debugPrint (" TagContent : # $tag_content #\ n ") ;
+998        # debugPrint (" Content :# $content #\ n ") ;
+999
+1000       if (! exists ( $xml_hash { $tag_name }) )
+1001       {
+1002           $xml_hash { $tag_name } = [];
+1003       }
+1004
+1005
+1006       # nested tags
+1007       if ( $tag_content =~ /^\ s * </ s ) {
+1008            $tag_content = parseXmlHelper ( $tag_content ,{}) ;
+1009       }
+1010
+1011       my @tag_array = @ { $xml_hash { $tag_name }};
+1012       push @tag_array , $tag_content ;
+1013       $xml_hash { $tag_name } = \ @tag_array ;
+1014
+1015       $hash_ref = parseXmlHelper ( $content , \% xml_hash ) ;
+1016       return $hash_ref ;
+1017   }
+1018
+1019   sub generateXml
+1020   {
+1021       my $hash_ref = shift @_ ;
+1022       my $content = gene rateXmlHelper ( $hash_ref , 1) ;
+1023       $content = " < xml - document >\ n " . $content . " </ xml - document >\ n ";
+1024       return $content ;
+1025   }
+1026
+1027   sub gene rateXm lHelpe r
+1028   {
+1029       my $hash_ref = shift @_ ;
+1030       my $tab_level = shift @_ ;
+1031       die " gener ateXm lHelpe r : expected hash reference \ n " unless ( ref (
+              $hash_ref ) eq " HASH ") ;
+1032       my % xml_hash = %{ $hash_ref };
+1033       my $content = "";
+1034
+1035       my $x ;
+1036       foreach $x ( keys % xml_hash ) {
+1037           die " gener ateXml Helper : expected array reference \ n " unless ( ref
+                   ( $xml_hash { $x }) eq " ARRAY ") ;
+1038           # debugPrint (" key is : $x \ n ") ;
+
+
+                                                   57
+1039               my @tag_array = @ { $xml_hash { $x }};
+1040
+1041               my $t ;
+1042               foreach $t ( @tag_array ) {
+1043                   for ( my $i = 0; $i < $tab_level ; $i ++) {
+1044                        $content .= "\ t ";
+1045                   }
+1046                   $content .= " < $x >";
+1047                   if ( ref ( $t ) eq " HASH ") { # nested tag
+1048                        $content = $content . "\ n ";
+1049                        $content = $content . generateXmlHelper ( $t , $tab_level
+                                +1) ;
+1050                        for ( my $i = 0; $i < $tab_level ; $i ++) {
+1051                              $content .= "\ t ";
+1052                        }
+1053                        $content .= " </ $x >\ n ";
+1054                   }
+1055                   else {
+1056                        $content .= $t ;
+1057                        $content .= " </ $x >\ n "
+1058                   }
+1059               }
+1060         }
+1061
+1062         return $content ;
+1063   }
+1064
+1065   sub co n v e r t X m l H a s h T o U s e r H a s h
+1066   {
+1067       my $hash_ref = shift @_ ;
+1068       my % xml_hash = %{ $hash_ref };
+1069       my % user_hash ;
+1070
+1071         die " expected < user >\ n " unless exists ( $xml_hash {" user "}) ;
+1072         my @tag_array = @ { $xml_hash {" user "}};
+1073
+1074         my $t ;
+1075         foreach $t ( @tag_array ) {
+1076             my % temp ;
+1077             $temp {" name "} = $ { $t - >{" name "}}[0];
+1078             $temp {" notify "} = $ { $t - >{" notify "}}[0];
+1079             $temp {" url "} = $t - >{" url "};
+1080             $user_hash { $ { $t - >{" email "}}[0]} = \% temp ;
+1081         }
+1082         return \% user_hash ;
+1083   }
+1084
+1085   sub co n v e r t U s e r H a s h T o X m l H a s h
+1086   {
+1087       my $hash_ref = shift @_ ;
+1088       my % user_hash = %{ $hash_ref };
+1089       my % xml_hash ;
+1090
+1091         my $x ;
+1092         my @userArray ;
+1093         foreach $x ( keys % user_hash ) {
+1094             my % temp = %{ $user_hash { $x }};
+
+
+                                                            58
+1095                 my % info_hash ;
+1096
+1097                  $info_hash {" email "} = [ $x ];
+1098                  $info_hash {" name "} = [ $temp {" name "}];
+1099                  $info_hash {" url "} = $temp {" url "};
+1100                  $info_hash {" notify "} = [ $temp {" notify "}];
+1101
+1102              push @userArray , \% info_hash ;
+1103          }
+1104          $xml_hash {" user "} = \ @userArray ;
+1105          return \% xml_hash ;
+1106   }
+1107
+1108   sub c o n v e r t X m l H a s h T o P r o f e s s o r H a s h
+1109   {
+1110       my $hash_ref = shift @_ ;
+1111       my % xml_hash = %{ $hash_ref };
+1112       my % professor_hash ;
+1113
+1114          die " expected < professor >\ n " unless exists ( $xml_hash {" professor "}) ;
+1115          my @tag_array = @ { $xml_hash {" professor "}};
+1116
+1117          my $t ;
+1118          foreach $t ( @tag_array ) {
+1119              my % temp ;
+1120              $temp {" name "} = $ { $t - >{" name "}}[0];
+1121
+1122                 die " expected < site >\ n " unless exists ( $t - >{" site "}) ;
+1123                 my @tag_array2 = @ { $t - >{" site "}};
+1124                 my % result_hash ;
+1125
+1126                 my $t2 ;
+1127                 my % temp2 ;
+1128                 foreach $t2 ( @tag_array2 ) {
+1129                      my % temp3 ;
+1130                      if ( defined ( $ { $t2 - >{" depth "}}[0]) ) {
+1131                           $temp3 {" depth "} = $ { $t2 - >{" depth "}}[0];
+1132                      }
+1133                      if ( defined ( $ { $t2 - >{" allow "}}[0]) ) {
+1134                           $temp3 {" allow "} = $ { $t2 - >{" allow "}}[0];
+1135                      }
+1136                      $temp2 { $ { $t2 - >{" url "}}[0]} =\% temp3 ;
+1137                 }
+1138                 $temp {" sites "} = \% temp2 ;
+1139                 $professor_hash { $ { $t - >{" email "}}[0]} = \% temp ;
+1140          }
+1141          return \% professor_hash ;
+1142   }
+1143
+1144   sub c o n v e r t P r o f e s s o r H a s h T o X m l H a s h
+1145   {
+1146       my $hash_ref = shift @_ ;
+1147       my % professor_hash = %{ $hash_ref };
+1148       my % xml_hash ;
+1149
+1150          my $k ;
+1151          my @professor_array ;
+
+
+                                                                       59
+1152          foreach $k ( keys % professor_hash ) {
+1153              my % temp = %{( $professor_hash { $k }) };
+1154              my % info_hash ;
+1155
+1156                 $info_hash {" email "} = [ $k ];
+1157                 $info_hash {" name "} =[ $temp {" name "}];
+1158
+1159                 my % sites_hash = %{ $temp {" sites "}};
+1160                 my $l ;
+1161                 my @sites_array ;
+1162                 foreach $l ( keys % sites_hash ) {
+1163                      my % sites_xml_hash ;
+1164                      $sites_xml_hash {" url "} = [ $l ];
+1165                      if ( defined ( $sites_hash { $l } - >{" depth "}) ) {
+1166                           $sites_xml_hash {" depth "} = [ $sites_hash { $l } - >{" depth
+                                  "}];
+1167                      }
+1168                      if ( defined ( $sites_hash { $l } - >{" allow "}) ) {
+1169                           $sites_xml_hash {" allow "} = [ $sites_hash { $l } - >{" allow
+                                  "}];
+1170                      }
+1171                      push @sites_array , \% sites_xml_hash ;
+1172                 }
+1173                 $info_hash {" site "} = \ @sites_array ;
+1174                 push @professor_array , \% info_hash ;
+1175          }
+1176          $xml_hash {" professor "} = \ @professor_array ;
+1177          return \% xml_hash ;
+1178   }
+1179
+1180   sub c o n v e r t P r o f e s s o r H a s h T o S i t e H a s h
+1181   {
+1182       my $hash_ref = shift @_ ;
+1183       my % student_hash = %{ $hash_ref };
+1184       my % site_hash ;
+1185
+1186          my $v ;
+1187          foreach $v ( values % student_hash ) {
+1188              die " c o n v e r t S t u d e n t H a s h T o S i t e H a s h : expected < sites >\ n " unless
+                      exists ( $v - >{" sites "}) ;
+1189              my % url_hash = %{ $v - >{" sites "}};
+1190              my $name = $v - >{" name "};
+1191
+1192                 my $url ;
+1193                 foreach $url ( keys % url_hash ) {
+1194                     checkUrlFormat ( $url ) ;
+1195                     $site_hash { $url } = $url_hash { $url };
+1196                     $site_hash { $url } - >{" name "} = $name ;
+1197                     $SiteTitles { $url } = "";
+1198                 }
+1199          }
+1200          return \% site_hash ;
+1201   }
+1202
+1203   sub fi l t er P r of e s so r H as h
+1204   {
+1205       my $hash_ref = shift @_ ;
+
+
+                                                                60
+1206       my @selectedSites = @_ ;
+1207
+1208       my % student_hash = %{ $hash_ref };
+1209       my % site_hash ;
+1210
+1211       my $k ;
+1212       foreach $k ( keys % student_hash ) {
+1213           my $v = $student_hash { $k };
+1214           die " c o n v e r t S t u d e n t H a s h T o S i t e H a s h : expected < sites >\ n " unless
+                   exists ( $v - >{" sites "}) ;
+1215           my % url_hash = %{ $v - >{" sites "}};
+1216           my $name = $v - >{" name "};
+1217
+1218             my $url ;
+1219             my $foundAny = 0;
+1220             foreach $url ( keys % url_hash ) {
+1221                 # print " Processing $url < br >";
+1222                 unless ( findInArray ( $url , @selectedSites ) ) {
+1223                       # print " deleting $url < br >";
+1224                       delete $url_hash { $url };
+1225                       next ;
+1226                 }
+1227                 $foundAny = 1;
+1228             }
+1229
+1230             if ( $foundAny == 0) {
+1231                  delete $student_hash { $k };
+1232             }
+1233             else
+1234             {
+1235                  $v - >{" sites "} = \% url_hash ;
+1236             }
+1237       }
+1238       return \% student_hash ;
+1239   }
+1240
+1241   # Looks for the presence of a key in an array .
+1242   # Key is the first parameter and @array is the second .
+1243   sub findInArray
+1244   {
+1245       my $key = shift @_ ;
+1246       my @array = @_ ;
+1247       foreach my $k ( @array ) {
+1248           if ( $k eq $key ) {
+1249                return 1;
+1250           }
+1251       }
+1252       return 0;
+1253   }
+1254
+1255   sub setDebug
+1256   {
+1257       $DEBUG = shift @_ ;
+1258   }
+1259
+1260   sub debugPrint
+1261   {
+
+
+                                                      61
+1262        my $message = shift @_ ;
+1263        if ( $DEBUG == 1) {
+1264             print " $message ";
+1265        }
+1266        return 1;
+1267   }
+1268
+1269   sub setBrowser
+1270   {
+1271       $BROWSER = shift @_ ;
+1272   }
+1273
+1274   sub browserPrint
+1275   {
+1276       my $message = shift @_ ;
+1277       if ( $BROWSER == 1) {
+1278            print " $message ";
+1279       }
+1280       return 1;
+1281   }
+1282
+1283
+1284   1;
+
+
+
+
+                                       62
+
