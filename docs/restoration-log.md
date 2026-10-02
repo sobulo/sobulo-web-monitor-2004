@@ -218,3 +218,22 @@ exit status 255
 ```
 
 The reconstructed caller rejected the external URL before invoking the historical crawler.
+
+
+## Stage 4 closure: behavior reconstruction
+
+The controlled execution above is also the completion evidence for Stage 4, scoped to the surviving Appendix A researcher-monitoring backend.
+
+The run establishes the observed input/output behavior of the preserved path: a researcher-style site configuration identifies the starting page; the historical crawler retrieves that page; publication-style links are filtered into a timestamped snapshot; a later snapshot can be reloaded; the historical diff reports a link that is no longer present and a newly present link; and the preserved reporting routine renders those differences.
+
+The fixture change did not modify or convert publication files. It changed only which publication links were present on the controlled HTML page, allowing the monitor to report one previously observed link as missing and another as newly added.
+
+Together with the static audit, this is sufficient to close the planned behavior-reconstruction stage for the code that actually survives in Appendix A. Recursive crawler behavior, depth/allow semantics, file formats, configuration structures, and the boundaries of missing surrounding application components are documented in `docs/static-audit.md`; the controlled run adds direct execution evidence for the central crawl -> snapshot -> diff -> report path.
+
+### Completion boundary
+
+Stages 3 and 4 are considered complete for the surviving researcher-domain backend.
+
+This repository does not claim that the entire 2004 application has been restored. The GUI/controller, scheduler, notification-policy orchestration, configuration-file orchestration, and thesis-described course-domain implementation were not printed in Appendix A and remain documented historical boundaries rather than implementation tasks for this repository.
+
+The reproducible execution steps are maintained in `RUNNING.md`.
