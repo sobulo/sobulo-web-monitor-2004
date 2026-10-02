@@ -14,26 +14,26 @@ Scope: the complete Appendix A transcription, logical thesis pages 38-62 (printe
 | `filterLinks` | 198-215 | Keeps links matching a regular-expression filter. |
 | `filterOutLinks` | 223-251 | Removes links whose selected fields match a regular-expression filter. |
 | `removeDuplicateLinks` | 257-281 | Removes links with duplicate URLs. |
-| `filterHash` | 283-296 | Filters a hash by a regular expression applied to a selected field. |
-| `getLinksForSite` | 298-345 | Retrieves, filters, and deduplicates links for one configured site. |
+| `filterHash` | 283-296 | Takes a source hash and a list of keys, and returns a new hash containing only keys that exist in the source hash. |
+| `getLinksForSite` | 298-345 | Retrieves links for one site, filters results, recursively crawls according to depth and crawl filters, and collects okay and broken URLs. |
 | `getLinksForAllSites` | 349-380 | Retrieves links for all configured sites. |
 | `getKeysSortedByName` | 382-388 | Sorts hash keys by the nested `name` value. |
 | `printSnapshotHtml` | 390-499 | Prints an HTML snapshot/difference report. |
 | `getSnapshotEmailHtml` | 501-575 | Builds the HTML form of a snapshot email. |
 | `getSnapshotEmailText` | 577-649 | Builds the plain-text form of a snapshot email. |
-| `checkUrlFormat` | 651-662 | Adds a URL scheme when one is absent. |
+| `checkUrlFormat` | 651-662 | Validates that a URL matches the expected `http://` or `https://` format, warning and returning false when it does not. |
 | `readSiteFile` | 664-704 | Reads site records from a delimited file. |
 | `writeSiteFile` | 706-747 | Writes site records to a delimited file. |
 | `readUrlFile` | 749-781 | Reads URL records from a delimited file. |
 | `writeUrlFile` | 783-822 | Writes URL records to a delimited file. |
 | `sortLinks` | 824-829 | Sorts link records by URL. |
-| `diffLinks` | 831-878 | Compares two link arrays and reports added, removed, and changed links. |
+| `diffLinks` | 831-878 | Compares two sorted link sets and returns links marked as added or removed. |
 | `printLinkInfo` | 880-893 | Prints selected link fields. |
 | `translateUrlToFileName` | 895-901 | Converts a URL into a cache filename. |
 | `readCachedPage` | 903-909 | Reads a cached page from disk. |
 | `writeCachedPage` | 911-924 | Writes a page to the cache. |
 | `sendMail` | 926-965 | Sends a multipart plain-text/HTML message through `sendmail`. |
-| `parseXml` | 967-976 | Starts conversion of a parsed XML tree into nested hashes and arrays. |
+| `parseXml` | 967-976 | Parses XML text into the nested hash and array structure used by the monitoring system. |
 | `parseXmlHelper` | 978-1017 | Recursively converts parsed XML nodes into nested data structures. |
 | `generateXml` | 1019-1025 | Starts XML generation for a nested hash. |
 | `generateXmlHelper` | 1027-1063 | Recursively renders nested hashes and arrays as XML text. |
@@ -42,7 +42,7 @@ Scope: the complete Appendix A transcription, logical thesis pages 38-62 (printe
 | `convertXmlHashToProfessorHash` | 1108-1142 | Converts XML-shaped professor data to the professor hash. |
 | `convertProfessorHashToXmlHash` | 1144-1178 | Converts the professor hash to XML-shaped data. |
 | `convertProfessorHashToSiteHash` | 1180-1201 | Converts professor/course data to site records. |
-| `filterProfessorHash` | 1203-1239 | Filters professor/course records against a selected user. |
+| `filterProfessorHash` | 1203-1239 | Filters professor and site data according to the supplied selected-site URLs, removing professors that have no selected sites remaining. |
 | `findInArray` | 1243-1253 | Searches an array for an exact value. |
 | `setDebug` | 1255-1258 | Sets the package debug flag. |
 | `debugPrint` | 1260-1267 | Conditionally prints a debug message. |
