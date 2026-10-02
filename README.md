@@ -37,6 +37,8 @@ This does not claim restoration of the entire historical application. GUI/contro
 - `work/` contains derived page renders and machine-extracted working text used for verification.
 - `runtime/` is ignored and is used only for generated local snapshots.
 
+Project closeout: [Historical Web Monitor — Closeout and Modern Successor](docs/historical-web-monitor-closeout-and-modern-successor.pdf).
+
 Machine-extracted text is verification evidence only and is not represented as original source code. The committed thesis PDF remains the primary published reference.
 
 The archival transcription in `original/` is intentionally kept separate from the 2026 caller and fixtures so historical evidence and later reconstruction remain distinguishable.
