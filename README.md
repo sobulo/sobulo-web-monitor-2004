@@ -17,7 +17,9 @@ This repository uses the thesis as a historical and technical source, not as a c
 
 The complete Perl backend printed in Appendix A has been transcribed and checked against the thesis. The archival transcription covers logical thesis pages 38–62 (physical PDF pages 45–69), printed lines 1–1284.
 
-The next phase is a static audit of external modules, operating-system dependencies, configuration/data expectations, and surrounding application components before any attempt is made to execute or repair the historical code.
+The static reconstruction audit is complete; see `docs/static-audit.md`. It maps the surviving Appendix A backend to the monitoring-system behavior described in Chapter 4, identifies external dependencies, and separates preserved code from surrounding application components that were not printed in the thesis.
+
+The next phase is runnable Perl restoration: create a separate reconstructed caller around the frozen archival package and demonstrate the researcher-domain path from controlled crawl to timestamped snapshots, diff, and report before expanding to notification, course monitoring, scheduling, or GUI work.
 
 ## Repository areas
 

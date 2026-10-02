@@ -68,8 +68,8 @@ Calls between the routines above include `browserPrint`, `debugPrint`, `getLinks
 ## External programs and OS facilities
 
 - `/usr/sbin/sendmail -t`, opened as a process pipe by `sendMail`.
-- Filesystem and directory facilities: `mkdir`, `chmod`, `opendir`, `readdir`, `closedir`, file `open`, file `close`, and file tests.
-- The system clock through Perl's `time` and `localtime` functions.
+- Filesystem and directory facilities: `mkdir`, `chmod`, `opendir`, `readdir`, `closedir`, file `open`, and file `close`.
+- The system clock through Perl's `time` function.
 - HTTP/network access through `LWP::UserAgent` and HTTP request/response objects.
 
 This inventory does not correct missing imports, obsolete APIs, apparent defects, or questionable behavior.
