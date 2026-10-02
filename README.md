@@ -8,10 +8,10 @@ This repository uses the thesis as a historical and technical source, not as a c
 
 ## Chronology and attribution
 
-- **2003:** Early MOBS papers by AnHai Doan, Robert McCann, Alexander Kramnik, and Vanitha Varadarajan describe the mass-collaboration approach and bookstore information-integration examples.
-- **2004:** My master's thesis documents and analyzes the MOBS-based query-translation application and separately presents the monitoring system that I implemented.
-- **2005:** The research group published *Integrating Data from Disparate Sources: A Mass Collaboration Approach*, continuing the MOBS line of work; I am a coauthor on that paper.
-- **2026:** This repository preserves the historical monitoring implementation and prepares it for careful reconstruction, execution, and later modernization while keeping historical attribution explicit.
+- **2003:** Early MOBS work includes [*Building Data Integration Systems: A Mass Collaboration Approach*](https://pages.cs.wisc.edu/~anhai/projects/papers/mobs-ijcai03-workshop.pdf) by AnHai Doan and Robert McCann, and [*Building Data Integration Systems via Mass Collaboration*](https://pages.cs.wisc.edu/~anhai/projects/papers/mobs-webdb03.pdf) by Robert McCann, AnHai Doan, Alexander Kramnik, and Vanitha Varadarajan. These papers describe the mass-collaboration approach and bookstore information-integration examples.
+- **[2004](https://github.com/sobulo/sobulo-web-monitor-2004/tree/main/source):** My master's thesis documents and analyzes the MOBS-based query-translation application and separately presents the monitoring system that I implemented. The repository's `source/` directory contains the thesis and source-artifact documentation.
+- **2005:** The research group published [*Integrating Data from Disparate Sources: A Mass Collaboration Approach*](https://pages.cs.wisc.edu/~anhai/papers/mobs-icde05.pdf), continuing the MOBS line of work; I am a coauthor on that paper.
+- **[2026](https://github.com/sobulo/sobulo-web-monitor-2004/commits/main/):** This repository preserves the historical monitoring implementation and prepares it for careful reconstruction, execution, and later modernization while keeping historical attribution explicit. The linked commit history records that reconstruction process.
 
 ## Current status
 
