@@ -42,3 +42,5 @@ Project closeout: [Historical Web Monitor — Closeout and Modern Successor](doc
 Machine-extracted text is verification evidence only and is not represented as original source code. The committed thesis PDF remains the primary published reference.
 
 The archival transcription in `original/` is intentionally kept separate from the 2026 caller and fixtures so historical evidence and later reconstruction remain distinguishable.
+
+<sub>This repository is provided for academic and archival purposes and makes no claim regarding ultimate copyright ownership of the historical thesis-era source code, whether by the author, the University, or otherwise. Questions concerning University of Illinois ownership or policy may be directed to the Office of Technology Management at [otm@illinois.edu](mailto:otm@illinois.edu).</sub>
